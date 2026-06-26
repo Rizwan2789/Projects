@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"d:\\\\Projects\\\\My Personals\\\\Projects\\\\EchoNotes\\\\backend\"; $env:PYTHONIOENCODING=\"utf-8\"; if \\(Test-Path \".venv\\\\Scripts\\\\python.exe\"\\) { & \".venv\\\\Scripts\\\\python.exe\" test_db.py } else { python test_db.py })"
+    ]
+  }
+}

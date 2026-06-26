@@ -1,70 +1,21 @@
-<div style="padding: 3rem; font-family: sans-serif; max-width: 500px; margin: 0 auto; text-align: center;">
-  <h1 style="font-size: 1.8rem; margin-bottom: 0.5rem;">Minutes Tool</h1>
-  <p style="color: #666; margin-bottom: 2rem;">Stage 2 — Audio Capture Test</p>
+<div style="font-family: sans-serif; min-height: 100vh; background: #fafafa;">
+  <nav style="background: #1a1a2e; padding: 0 2rem; display: flex; align-items: center; gap: 2rem; height: 52px;">
+    <span style="color: white; font-weight: 700; font-size: 1rem; letter-spacing: 0.02em;">EchoNotes</span>
+    <a routerLink="/" routerLinkActive="nav-active" [routerLinkActiveOptions]="{exact:true}"
+       style="color: #aaa; text-decoration: none; font-size: 0.9rem; padding: 0.25rem 0;">
+      Record
+    </a>
+    <a routerLink="/meetings" routerLinkActive="nav-active"
+       style="color: #aaa; text-decoration: none; font-size: 0.9rem; padding: 0.25rem 0;">
+      History
+    </a>
+  </nav>
 
-  <!-- IDLE: ready to record -->
-  <ng-container *ngIf="!isRecording && !hasStopped">
-    <button
-      (click)="startRec()"
-      style="background: #e53935; color: white; border: none; padding: 1rem 2rem;
-             font-size: 1.1rem; border-radius: 8px; cursor: pointer;">
-      Start Recording
-    </button>
-    <p style="margin-top: 2rem; color: #444; font-size: 0.95rem;">{{ status }}</p>
-    <p style="margin-top: 1rem; color: #999; font-size: 0.8rem;">
-      When the screen picker appears — select Entire Screen and tick Share audio
-    </p>
-  </ng-container>
-
-  <!-- RECORDING: live timer -->
-  <ng-container *ngIf="isRecording">
-    <div style="margin-bottom: 1.5rem;">
-      <span style="display: inline-flex; align-items: center; gap: 0.5rem;
-                   font-size: 1.8rem; font-weight: bold; color: #e53935;">
-        <span style="width: 12px; height: 12px; background: #e53935; border-radius: 50%;
-                     display: inline-block; animation: pulse 1s infinite;"></span>
-        {{ formattedTime }}
-      </span>
-    </div>
-    <button
-      (click)="stopRec()"
-      style="background: #333; color: white; border: none; padding: 1rem 2rem;
-             font-size: 1.1rem; border-radius: 8px; cursor: pointer;">
-      Stop Recording
-    </button>
-  </ng-container>
-
-  <!-- REVIEW: blob held in memory, user decides what to do -->
-  <ng-container *ngIf="hasStopped">
-    <div style="background: #f5f5f5; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;">
-      <p style="font-size: 0.95rem; color: #555; margin: 0 0 0.4rem;">Recording ready</p>
-      <p style="font-size: 2rem; font-weight: bold; color: #333; margin: 0 0 0.4rem;">
-        {{ savedDuration }}
-      </p>
-      <p style="font-size: 0.9rem; color: #888; margin: 0;">{{ blobSize }}</p>
-    </div>
-
-    <div style="display: flex; gap: 1rem; justify-content: center;">
-      <button
-        (click)="saveRecording()"
-        style="background: #2e7d32; color: white; border: none; padding: 0.9rem 1.8rem;
-               font-size: 1rem; border-radius: 8px; cursor: pointer;">
-        Save to device
-      </button>
-      <button
-        (click)="discardRecording()"
-        style="background: white; color: #e53935; border: 2px solid #e53935;
-               padding: 0.9rem 1.8rem; font-size: 1rem; border-radius: 8px; cursor: pointer;">
-        Discard
-      </button>
-    </div>
-
-    <p style="margin-top: 1.2rem; color: #888; font-size: 0.85rem;">
-      Recording is held in memory — save or discard before closing.
-    </p>
-  </ng-container>
-
-  <style>
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
-  </style>
+  <main style="padding: 2.5rem 2rem; max-width: 700px; margin: 0 auto;">
+    <router-outlet />
+  </main>
 </div>
+
+<style>
+  .nav-active { color: white !important; border-bottom: 2px solid #7c83fd; }
+</style>

@@ -1,0 +1,62 @@
+<h2 style="font-size: 1.5rem; margin-bottom: 1.5rem; color: #1a1a2e;">Meeting History</h2>
+
+<!-- Loading -->
+<div *ngIf="isLoading" style="text-align:center; padding: 2rem; color: #888;">
+  Loading…
+</div>
+
+<!-- Error -->
+<p *ngIf="error" style="color: #c62828; font-size: 0.9rem;">{{ error }}</p>
+
+<!-- Empty state -->
+<div *ngIf="!isLoading && !error && meetings.length === 0"
+     style="text-align:center; padding: 3rem; color: #aaa;">
+  <p style="font-size: 1rem; margin: 0 0 0.5rem;">No meetings yet.</p>
+  <p style="font-size: 0.85rem;">Record and transcribe a meeting to see it here.</p>
+</div>
+
+<!-- Meeting cards -->
+<div *ngFor="let m of meetings"
+     style="background: white; border: 1px solid #e0e0e0; border-radius: 10px;
+            margin-bottom: 0.75rem; overflow: hidden;">
+
+  <!-- Card header (clickable) -->
+  <div (click)="toggle(m)"
+       style="display: flex; align-items: center; justify-content: space-between;
+              padding: 1rem 1.25rem; cursor: pointer; user-select: none;">
+    <div>
+      <p style="margin: 0 0 0.2rem; font-weight: 600; color: #222; font-size: 0.95rem;">
+        {{ m.title || 'Untitled Meeting' }}
+      </p>
+      <p style="margin: 0; font-size: 0.8rem; color: #888;">
+        {{ formatDate(m.created_at) }} &bull; {{ formatDuration(m.duration_s) }}
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <span *ngIf="m.has_transcript"
+            style="font-size: 0.72rem; background: #e3f2fd; color: #1565c0;
+                   padding: 0.15rem 0.5rem; border-radius: 99px;">transcript</span>
+      <span *ngIf="m.has_minutes"
+            style="font-size: 0.72rem; background: #f3e5f5; color: #7b1fa2;
+                   padding: 0.15rem 0.5rem; border-radius: 99px;">minutes</span>
+      <span style="color: #aaa; font-size: 1rem;">{{ expandedId === m.id ? '▲' : '▼' }}</span>
+    </div>
+  </div>
+
+  <!-- Expanded transcript -->
+  <div *ngIf="expandedId === m.id"
+       style="border-top: 1px solid #f0f0f0; padding: 1rem 1.25rem; background: #fafafa;">
+    <div *ngIf="isLoadingDetail" style="color: #888; font-size: 0.9rem;">Loading…</div>
+    <div *ngIf="expandedMeeting && !isLoadingDetail">
+      <p *ngIf="!expandedMeeting.transcript" style="color: #aaa; font-size: 0.9rem; margin: 0;">
+        No transcript available.
+      </p>
+      <div *ngIf="expandedMeeting.transcript"
+           style="font-size: 0.9rem; line-height: 1.65; color: #333;
+                  white-space: pre-wrap; max-height: 260px; overflow-y: auto;">
+        {{ expandedMeeting.transcript }}
+      </div>
+    </div>
+  </div>
+
+</div>
