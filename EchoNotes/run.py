@@ -67,10 +67,12 @@ def wait_for_backend(timeout: int = 300) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            urllib.request.urlopen(url, timeout=2)
-            return True
+            response = urllib.request.urlopen(url, timeout=2)
+            if response.getcode() == 200:
+                return True
         except Exception:
-            time.sleep(2)
+            pass
+        time.sleep(2)
     return False
 
 
@@ -89,11 +91,18 @@ def main():
 
     # ── Start backend ────────────────────────────────────────────
     log("🚀", "Starting FastAPI backend on http://127.0.0.1:8000 ...", CYAN)
+    if not UVICORN.exists():
+        log("❌", f"uvicorn not found at {UVICORN}. Run setup first.", RED)
+        sys.exit(1)
     backend = subprocess.Popen(
         [str(UVICORN), "main:app", "--host", "127.0.0.1", "--port", "8000"],
         cwd=str(BACKEND),
         env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"},
     )
+    time.sleep(0.5)
+    if backend.poll() is not None:
+        log("❌", "Backend process exited immediately. Check logs above.", RED)
+        sys.exit(1)
 
     # ── Start Electron immediately ───────────────────────────────
     log("🖥️ ", "Launching EchoNotes window...", CYAN)
@@ -123,7 +132,10 @@ def main():
     finally:
         log("🛑", "Electron closed — shutting down backend...", YELLOW)
         backend.terminate()
-        backend.wait()
+        try:
+            backend.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            backend.kill()
         log("👋", "EchoNotes stopped. Goodbye!", CYAN)
 
 

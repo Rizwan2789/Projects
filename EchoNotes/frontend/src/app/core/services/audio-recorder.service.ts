@@ -10,32 +10,17 @@ export class AudioRecorderService {
   async startRecording(): Promise<void> {
     this.chunks = [];
 
-    // Step 1: Get desktop screen source ID from Electron main process.
-    // desktopCapturer is a Node.js API — cannot run inside the sandboxed renderer.
-    // preload.js bridges the call safely via contextBridge.
-    const sources = await window.electronAPI.getDesktopSources();
-    const primarySource = sources[0];
-
-    // Step 2: Open system audio (WASAPI loopback on Windows).
-    // Chromium requires a video constraint alongside chromeMediaSourceId —
-    // we stop the video track immediately after, keeping only audio.
-    const systemStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: primarySource.id,
-        },
-      } as MediaStreamConstraints['audio'],
-      video: {
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: primarySource.id,
-        },
-      } as MediaStreamConstraints['video'],
+    // Step 1: Capture screen + system audio.
+    // main.js intercepts this via setDisplayMediaRequestHandler and returns
+    // the primary screen with WASAPI loopback audio — no picker needed.
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true,
     });
-    systemStream.getVideoTracks().forEach(t => t.stop());
+    // Drop the video track — we only need the system audio track.
+    displayStream.getVideoTracks().forEach(t => t.stop());
 
-    // Step 3: Open the microphone
+    // Step 2: Open the microphone
     const micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: false,
@@ -44,12 +29,12 @@ export class AudioRecorderService {
       },
     });
 
-    this.activeStreams = [systemStream, micStream];
+    this.activeStreams = [displayStream, micStream];
 
-    // Step 4: Mix both streams into one using the Web Audio API graph
+    // Step 3: Mix both streams into one using the Web Audio API graph
     this.audioContext = new AudioContext();
     const destination = this.audioContext.createMediaStreamDestination();
-    this.audioContext.createMediaStreamSource(systemStream).connect(destination);
+    this.audioContext.createMediaStreamSource(displayStream).connect(destination);
     this.audioContext.createMediaStreamSource(micStream).connect(destination);
 
     // Step 5: Record the mixed stream as WebM/Opus chunks every second

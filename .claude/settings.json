@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(cd \"d:\\\\Projects\\\\My Personals\\\\Projects\\\\EchoNotes\\\\backend\"; $env:PYTHONIOENCODING=\"utf-8\"; if \\(Test-Path \".venv\\\\Scripts\\\\python.exe\"\\) { & \".venv\\\\Scripts\\\\python.exe\" test_db.py } else { python test_db.py })"
+      "PowerShell(cd \"d:\\\\Projects\\\\My Personals\\\\Projects\\\\EchoNotes\\\\backend\"; $env:PYTHONIOENCODING=\"utf-8\"; if \\(Test-Path \".venv\\\\Scripts\\\\python.exe\"\\) { & \".venv\\\\Scripts\\\\python.exe\" test_db.py } else { python test_db.py })",
+      "Bash(.venv/Scripts/python.exe -c \"import speechbrain; import pydub; import sklearn; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/pip.exe install *)",
+      "Bash(.venv/Scripts/python.exe -c \"import speechbrain; import pydub; import sklearn; print\\('ALL OK'\\)\")",
+      "Bash(curl -s http://127.0.0.1:8000/health)",
+      "Bash(.venv/Scripts/python.exe -c \"import fastapi, faster_whisper, asyncpg; print\\('core deps OK'\\)\")",
+      "Bash(.venv/Scripts/pip.exe show *)",
+      "Bash(.venv/Scripts/python.exe -c \"import speechbrain; print\\('speechbrain OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import pydub; print\\('pydub OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import sklearn; print\\('sklearn OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import torch; print\\('torch OK'\\)\")",
+      "PowerShell(& \"d:\\\\Projects\\\\My Personals\\\\Projects\\\\EchoNotes\\\\backend\\\\.venv\\\\Scripts\\\\pip.exe\" install \"httpx>=0.27.0\")",
+      "PowerShell(ollama list)",
+      "PowerShell(ollama --version)",
+      "Read(//c/Users/User/AppData/Local/Programs/Ollama/**)"
     ]
   }
 }

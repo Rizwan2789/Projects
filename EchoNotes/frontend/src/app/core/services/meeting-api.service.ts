@@ -24,4 +24,12 @@ export class MeetingApiService {
   getMeeting(id: number): Observable<Meeting> {
     return this.http.get<Meeting>(`${BASE}/meetings/${id}`);
   }
+
+  deleteMeeting(id: number): Observable<void> {
+    return this.http.delete<void>(`${BASE}/meetings/${id}`);
+  }
+
+  generateMinutes(id: number): Observable<Meeting> {
+    return this.http.post<Meeting>(`${BASE}/meetings/${id}/minutes`, {});
+  }
 }

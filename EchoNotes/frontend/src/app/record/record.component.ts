@@ -2,6 +2,9 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { AudioRecorderService } from '../core/services/audio-recorder.service';
 import { MeetingApiService } from '../core/services/meeting-api.service';
 import { MeetingSessionService } from '../core/services/meeting-session.service';
@@ -16,10 +19,13 @@ export class RecordComponent {
   private recorder = inject(AudioRecorderService);
   private api = inject(MeetingApiService);
   private session = inject(MeetingSessionService);
+  private sanitizer = inject(DomSanitizer);
 
   isRecording = false;
   hasStopped = false;
   isTranscribing = false;
+  isGeneratingMinutes = false;
+  minutesHtml: SafeHtml | null = null;
   status = '';
   elapsedSeconds = 0;
   savedDuration = '';
@@ -90,6 +96,28 @@ export class RecordComponent {
     });
   }
 
+  generateMinutes() {
+    const id = this.session.lastMeetingId();
+    if (!id) return;
+    this.isGeneratingMinutes = true;
+    this.minutesHtml = null;
+    this.status = '';
+
+    this.api.generateMinutes(id).subscribe({
+      next: (meeting) => {
+        this.minutesHtml = this.sanitizer.bypassSecurityTrustHtml(
+          DOMPurify.sanitize(marked(meeting.minutes ?? '') as string)
+        );
+        this.isGeneratingMinutes = false;
+      },
+      error: (err) => {
+        const detail: string = err?.error?.detail ?? err?.message ?? 'Unknown error';
+        this.status = 'Minutes failed: ' + detail;
+        this.isGeneratingMinutes = false;
+      },
+    });
+  }
+
   discardRecording() {
     this.blob = null;
     this.hasStopped = false;
@@ -103,6 +131,8 @@ export class RecordComponent {
     this.blob = null;
     this.hasStopped = false;
     this.isTranscribing = false;
+    this.isGeneratingMinutes = false;
+    this.minutesHtml = null;
     this.elapsedSeconds = 0;
     this.savedDuration = '';
     this.blobSize = '';

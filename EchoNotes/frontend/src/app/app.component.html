@@ -1,3 +1,20 @@
+<!-- Startup overlay — sits over everything until the backend is ready -->
+<div *ngIf="overlayVisible" class="startup-overlay" [class.fade-out]="backendReady">
+  <div class="startup-card">
+    <div class="startup-logo">EchoNotes</div>
+    <div class="startup-tagline">Meeting recorder &amp; transcriber</div>
+    <ng-container *ngIf="!startupError">
+      <div class="startup-spinner"></div>
+      <p class="startup-message">{{ startupMessage }}</p>
+    </ng-container>
+    <ng-container *ngIf="startupError">
+      <p class="startup-error">{{ startupError }}</p>
+      <p class="startup-hint">Run <code>python run.py</code> in a terminal to see details.</p>
+    </ng-container>
+  </div>
+</div>
+
+<!-- App shell — always rendered, but blocked by the overlay until ready -->
 <div style="font-family: sans-serif; min-height: 100vh; background: #fafafa;">
   <nav style="background: #1a1a2e; padding: 0 2rem; display: flex; align-items: center; gap: 2rem; height: 52px;">
     <span style="color: white; font-weight: 700; font-size: 1rem; letter-spacing: 0.02em;">EchoNotes</span>

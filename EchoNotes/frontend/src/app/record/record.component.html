@@ -18,7 +18,7 @@
     </div>
     <p *ngIf="status" style="color: #c62828; font-size: 0.9rem;">{{ status }}</p>
     <p style="color: #999; font-size: 0.8rem;">
-      When the screen picker appears — select Entire Screen and tick Share audio
+      Recording will start automatically — no screen picker needed
     </p>
   </ng-container>
 
@@ -87,13 +87,32 @@
         {{ transcript }}
       </div>
     </div>
+    <!-- Minutes loading -->
+    <div *ngIf="isGeneratingMinutes" style="margin-bottom: 1.5rem; text-align: center;">
+      <div style="width: 32px; height: 32px; border: 3px solid #e0e0e0;
+                  border-top-color: #7b1fa2; border-radius: 50%;
+                  animation: spin 0.9s linear infinite; margin: 0 auto 0.5rem;"></div>
+      <p style="color: #888; font-size: 0.85rem; margin: 0;">Generating minutes via Ollama…</p>
+    </div>
+
+    <!-- Minutes display -->
+    <div *ngIf="minutesHtml && !isGeneratingMinutes" style="text-align: left; margin-bottom: 1.5rem;">
+      <h3 style="margin: 0 0 0.6rem; font-size: 1rem; color: #7b1fa2;">Meeting Minutes</h3>
+      <div [innerHTML]="minutesHtml"
+           style="background: #fdf6ff; border: 1px solid #ce93d8; border-radius: 8px;
+                  padding: 1.25rem; font-size: 0.9rem; line-height: 1.65; color: #333;
+                  max-height: 400px; overflow-y: auto;">
+      </div>
+    </div>
+
     <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
       <button
-        disabled
-        title="Coming in Stage 4"
+        (click)="generateMinutes()"
+        [disabled]="isGeneratingMinutes"
+        [style.opacity]="isGeneratingMinutes ? 0.65 : 1"
         style="background: #7b1fa2; color: white; border: none; padding: 0.9rem 1.8rem;
-               font-size: 1rem; border-radius: 8px; cursor: not-allowed; opacity: 0.45;">
-        Generate Minutes
+               font-size: 1rem; border-radius: 8px; cursor: pointer;">
+        {{ isGeneratingMinutes ? 'Generating…' : 'Generate Minutes' }}
       </button>
       <a routerLink="/meetings"
          style="background: white; color: #1565c0; border: 2px solid #1565c0;
