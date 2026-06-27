@@ -25,7 +25,7 @@ export class AppComponent implements OnInit {
   }
 
   private poll() {
-    this.http.get<{ status: string; whisper_ready: boolean; whisper_failed: boolean }>(
+    this.http.get<{ status: string; whisper_ready: boolean; whisper_failed: boolean; loading_status: string }>(
       'http://localhost:8000/health'
     ).subscribe({
       next: (res) => {
@@ -42,8 +42,8 @@ export class AppComponent implements OnInit {
             this.startupError = 'Speech model is taking too long. Check the terminal for errors.';
             return;
           }
-          this.startupMessage = 'Loading speech recognition model…';
-          setTimeout(() => this.poll(), 1500);
+          this.startupMessage = res.loading_status || 'Loading models…';
+          setTimeout(() => this.poll(), 45000);
         }
       },
       error: () => {
@@ -55,7 +55,7 @@ export class AppComponent implements OnInit {
         } else {
           this.startupMessage = 'Taking a bit longer than usual…';
         }
-        setTimeout(() => this.poll(), 1500);
+        setTimeout(() => this.poll(), 10000);
       },
     });
   }

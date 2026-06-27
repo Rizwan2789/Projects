@@ -40,22 +40,26 @@ OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 whisper: WhisperModel | None = None
 speaker_encoder = None
 whisper_load_failed = False
+loading_status = "Starting up…"
 
 
 def _load_models_thread():
-    global whisper, speaker_encoder, whisper_load_failed
+    global whisper, speaker_encoder, whisper_load_failed, loading_status
 
-    logger.info("  🎙️   Loading Whisper 'small' model on CPU  (first run ~240 MB download)...")
+    loading_status = "Loading speech recognition model (Whisper small, ~244 MB cached)…"
+    logger.info("  🎙️   Loading Whisper 'small' model on CPU...")
     try:
         whisper = WhisperModel("small", device="cpu", compute_type="int8")
         logger.info("  ✅  Whisper model ready")
     except Exception as e:
         whisper_load_failed = True
+        loading_status = f"Whisper failed: {e}"
         logger.error(f"  ❌  Whisper failed to load: {e}")
         return
 
     if _DIARIZE_AVAILABLE:
-        logger.info("  🔊  Loading speaker encoder  (first run ~80 MB download)...")
+        loading_status = "Loading speaker identification model (first run ~80 MB download)…"
+        logger.info("  🔊  Loading speaker encoder...")
         try:
             import torch  # noqa: F401 — needed by speechbrain
             from speechbrain.pretrained import EncoderClassifier
@@ -69,6 +73,7 @@ def _load_models_thread():
     else:
         logger.info("  ℹ️   speechbrain not installed — diarization disabled")
 
+    loading_status = "Ready"
     logger.info("  🟢  All models loaded")
 
 
@@ -172,6 +177,7 @@ def health():
         "whisper_ready": whisper is not None,
         "whisper_failed": whisper_load_failed,
         "diarization_ready": speaker_encoder is not None,
+        "loading_status": loading_status,
     }
 
 
