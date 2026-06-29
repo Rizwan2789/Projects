@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import threading
+import uuid
 from contextlib import asynccontextmanager
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -21,8 +22,10 @@ import httpx
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from database import engine, get_db, Base, DATABASE_URL
 from models import Meeting
@@ -36,20 +39,24 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+WHISPER_MODEL   = os.getenv("WHISPER_MODEL", "small")
 
 whisper: WhisperModel | None = None
 speaker_encoder = None
 whisper_load_failed = False
 loading_status = "Starting up…"
 
+# In-memory job store — keyed by UUID string
+_jobs: dict = {}
+
 
 def _load_models_thread():
     global whisper, speaker_encoder, whisper_load_failed, loading_status
 
-    loading_status = "Loading speech recognition model (Whisper small, ~244 MB cached)…"
-    logger.info("  🎙️   Loading Whisper 'small' model on CPU...")
+    loading_status = f"Loading speech recognition model (Whisper {WHISPER_MODEL})…"
+    logger.info(f"  🎙️   Loading Whisper '{WHISPER_MODEL}' model on CPU...")
     try:
-        whisper = WhisperModel("small", device="cpu", compute_type="int8")
+        whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
         logger.info("  ✅  Whisper model ready")
     except Exception as e:
         whisper_load_failed = True
@@ -122,7 +129,8 @@ def _assign_speakers(audio_bytes: bytes, segments: list) -> str:
     from pydub import AudioSegment
     from sklearn.cluster import AgglomerativeClustering
 
-    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
+    # format=None lets pydub auto-detect (webm, mp3, mp4, m4a, wav all work)
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=None)
     audio = audio.set_channels(1).set_frame_rate(16000)
     samples = np.array(audio.get_array_of_samples(), dtype=np.float32) / 32768.0
 
@@ -160,12 +168,69 @@ def _assign_speakers(audio_bytes: bytes, segments: list) -> str:
     )
 
 
+async def _run_transcription(
+    job_id: str, audio_bytes: bytes, title: str, duration_s: int, language: str
+) -> None:
+    """Async task: transcribe audio and save the meeting, updating _jobs throughout."""
+    _jobs[job_id]["status"] = "processing"
+
+    try:
+        def _do_transcribe():
+            segs_gen, info = whisper.transcribe(
+                io.BytesIO(audio_bytes),
+                beam_size=10,
+                language=language or None,
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=300),
+                word_timestamps=True,
+                temperature=0,
+            )
+            return list(segs_gen), info  # materialise generator inside thread
+
+        logger.info(f"  Job {job_id[:8]} — running Whisper ({len(audio_bytes) // 1024} KB)…")
+        segments, info = await asyncio.to_thread(_do_transcribe)
+
+        if speaker_encoder is not None:
+            try:
+                full_text = await asyncio.to_thread(_assign_speakers, audio_bytes, segments)
+            except Exception as e:
+                logger.warning(f"  Diarization failed, using plain transcript: {e}")
+                full_text = " ".join(seg.text.strip() for seg in segments)
+        else:
+            full_text = " ".join(seg.text.strip() for seg in segments)
+
+        logger.info(
+            f"  Job {job_id[:8]} — done  language={info.language} "
+            f"({info.language_probability:.0%})  {len(full_text)} chars"
+        )
+
+        async with AsyncSession(engine) as db:
+            meeting = Meeting(title=title or "Untitled Meeting", duration_s=duration_s, transcript=full_text)
+            db.add(meeting)
+            await db.commit()
+            await db.refresh(meeting)
+
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["result"] = {
+            "id": meeting.id,
+            "title": meeting.title,
+            "created_at": meeting.created_at.isoformat(),
+            "duration_s": meeting.duration_s,
+            "transcript": meeting.transcript,
+        }
+
+    except Exception as e:
+        logger.error(f"  Job {job_id[:8]} — failed: {e}")
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["error"] = str(e)
+
+
 app = FastAPI(title="EchoNotes Backend", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "DELETE", "PATCH"],
     allow_headers=["*"],
 )
 
@@ -181,12 +246,12 @@ def health():
     }
 
 
-@app.post("/transcribe")
+@app.post("/transcribe", status_code=202)
 async def transcribe(
     file: UploadFile = File(...),
     title: str = Form(""),
     duration_s: int = Form(0),
-    db: AsyncSession = Depends(get_db),
+    language: str = Form(""),
 ):
     audio_bytes = await file.read()
     if not audio_bytes:
@@ -196,53 +261,39 @@ async def transcribe(
     if whisper is None:
         raise HTTPException(status_code=503, detail="Transcription model is not ready yet.")
 
-    logger.info(f"Transcribing {len(audio_bytes) // 1024} KB  title='{title}'  duration={duration_s}s")
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {"status": "pending", "result": None, "error": None}
+    asyncio.create_task(_run_transcription(job_id, audio_bytes, title, duration_s, language))
 
-    try:
-        segments, info = whisper.transcribe(
-            io.BytesIO(audio_bytes),
-            beam_size=10,
-            language=None,
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=300),
-            word_timestamps=True,
-            temperature=0,
-        )
-        segments = list(segments)  # materialize generator; reused for diarization alignment
-    except Exception as e:
-        logger.error(f"Whisper transcription error: {e}")
-        raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
+    logger.info(f"  Job {job_id[:8]} — queued  title='{title}'  lang='{language or 'auto'}'")
+    return {"job_id": job_id}
 
-    if speaker_encoder is not None:
-        try:
-            full_text = _assign_speakers(audio_bytes, segments)
-        except Exception as e:
-            logger.warning(f"Diarization failed, falling back to plain transcript: {e}")
-            full_text = " ".join(seg.text.strip() for seg in segments)
-    else:
-        full_text = " ".join(seg.text.strip() for seg in segments)
 
-    logger.info(f"Transcription done — language: {info.language} ({info.language_probability:.0%}), {len(full_text)} chars")
-
-    meeting = Meeting(title=title or "Untitled Meeting", duration_s=duration_s, transcript=full_text)
-    db.add(meeting)
-    await db.commit()
-    await db.refresh(meeting)
-    logger.info(f"Meeting saved — id={meeting.id}")
-
+@app.get("/transcribe/{job_id}")
+def get_transcribe_job(job_id: str):
+    job = _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
     return {
-        "id": meeting.id,
-        "title": meeting.title,
-        "created_at": meeting.created_at.isoformat(),
-        "duration_s": meeting.duration_s,
-        "transcript": meeting.transcript,
+        "status": job["status"],
+        "result": job["result"],
+        "error": job["error"],
     }
 
 
+class MeetingPatch(BaseModel):
+    title: Optional[str] = None
+    transcript: Optional[str] = None
+
+
 @app.get("/meetings")
-async def list_meetings(db: AsyncSession = Depends(get_db)):
+async def list_meetings(q: str = "", db: AsyncSession = Depends(get_db)):
     try:
-        result = await db.execute(select(Meeting).order_by(Meeting.created_at.desc()))
+        stmt = select(Meeting).order_by(Meeting.created_at.desc())
+        if q:
+            pattern = f"%{q}%"
+            stmt = stmt.where(or_(Meeting.title.ilike(pattern), Meeting.transcript.ilike(pattern)))
+        result = await db.execute(stmt)
         meetings = result.scalars().all()
     except Exception as e:
         logger.error(f"Failed to list meetings: {e}")
@@ -286,6 +337,30 @@ async def delete_meeting(meeting_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
     logger.info(f"Meeting deleted — id={meeting_id}")
     return Response(status_code=204)
+
+
+@app.patch("/meetings/{meeting_id}")
+async def patch_meeting(meeting_id: int, patch: MeetingPatch, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
+    meeting = result.scalar_one_or_none()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    if patch.title is not None:
+        meeting.title = patch.title
+    if patch.transcript is not None:
+        meeting.transcript = patch.transcript
+        meeting.minutes = None  # invalidate stale minutes when transcript changes
+    await db.commit()
+    await db.refresh(meeting)
+    logger.info(f"Meeting patched — id={meeting_id}")
+    return {
+        "id": meeting.id,
+        "title": meeting.title,
+        "created_at": meeting.created_at.isoformat(),
+        "duration_s": meeting.duration_s,
+        "transcript": meeting.transcript,
+        "minutes": meeting.minutes,
+    }
 
 
 @app.post("/meetings/{meeting_id}/minutes")

@@ -9,6 +9,20 @@ import { AudioRecorderService } from '../core/services/audio-recorder.service';
 import { MeetingApiService } from '../core/services/meeting-api.service';
 import { MeetingSessionService } from '../core/services/meeting-session.service';
 
+const LANGUAGES = [
+  { code: '',   label: 'Auto-detect' },
+  { code: 'en', label: 'English' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'ur', label: 'Urdu' },
+];
+
 @Component({
   selector: 'app-record',
   standalone: true,
@@ -21,6 +35,8 @@ export class RecordComponent {
   private session = inject(MeetingSessionService);
   private sanitizer = inject(DomSanitizer);
 
+  readonly languages = LANGUAGES;
+
   isRecording = false;
   hasStopped = false;
   isTranscribing = false;
@@ -31,6 +47,8 @@ export class RecordComponent {
   savedDuration = '';
   blobSize = '';
   meetingTitle = '';
+  selectedLanguage = '';
+  copiedTranscript = false;
   private blob: Blob | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -79,17 +97,39 @@ export class RecordComponent {
     this.isTranscribing = true;
     this.status = '';
 
-    this.api.transcribe(this.blob, this.meetingTitle, this.elapsedSeconds).subscribe({
-      next: (meeting) => {
-        this.session.transcript.set(meeting.transcript ?? '');
-        this.session.lastMeetingId.set(meeting.id);
-        this.isTranscribing = false;
+    this.api.transcribe(this.blob, this.meetingTitle, this.elapsedSeconds, this.selectedLanguage).subscribe({
+      next: ({ job_id }) => {
+        this._pollForResult(job_id);
       },
       error: (err) => {
         const msg: string = err?.error?.detail ?? err?.message ?? 'Unknown error';
         this.status = msg.includes('fetch') || err.status === 0
           ? 'Backend is not ready yet. Please wait a few seconds and try again.'
           : 'Transcription failed: ' + msg;
+        this.hasStopped = true;
+        this.isTranscribing = false;
+      },
+    });
+  }
+
+  private _pollForResult(jobId: string) {
+    this.api.pollJob(jobId).subscribe({
+      next: (job) => {
+        if (job.status === 'done' && job.result) {
+          this.session.transcript.set(job.result.transcript ?? '');
+          this.session.lastMeetingId.set(job.result.id);
+          this.isTranscribing = false;
+        } else if (job.status === 'error') {
+          this.status = 'Transcription failed: ' + (job.error ?? 'Unknown error');
+          this.hasStopped = true;
+          this.isTranscribing = false;
+        } else {
+          setTimeout(() => this._pollForResult(jobId), 2000);
+        }
+      },
+      error: (err) => {
+        const msg: string = err?.error?.detail ?? err?.message ?? 'Unknown error';
+        this.status = 'Transcription failed: ' + msg;
         this.hasStopped = true;
         this.isTranscribing = false;
       },
@@ -125,6 +165,14 @@ export class RecordComponent {
     this.session.audioBlob.set(null);
     this.session.transcript.set('');
     this.status = 'Recording discarded.';
+  }
+
+  copyTranscript() {
+    if (!this.transcript) return;
+    navigator.clipboard.writeText(this.transcript).then(() => {
+      this.copiedTranscript = true;
+      setTimeout(() => { this.copiedTranscript = false; }, 2000);
+    });
   }
 
   startNew() {

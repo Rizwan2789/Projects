@@ -8,7 +8,14 @@
         [(ngModel)]="meetingTitle"
         placeholder="Meeting title (optional)"
         style="width: 100%; box-sizing: border-box; padding: 0.6rem 1rem;
-               border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; margin-bottom: 1rem;" />
+               border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; margin-bottom: 0.75rem;" />
+      <select
+        [(ngModel)]="selectedLanguage"
+        style="width: 100%; box-sizing: border-box; padding: 0.6rem 1rem;
+               border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem;
+               margin-bottom: 1rem; background: white; color: #333;">
+        <option *ngFor="let lang of languages" [value]="lang.code">{{ lang.label }}</option>
+      </select>
       <button
         (click)="startRec()"
         style="background: #e53935; color: white; border: none; padding: 1rem 2.5rem;
@@ -113,6 +120,12 @@
         style="background: #7b1fa2; color: white; border: none; padding: 0.9rem 1.8rem;
                font-size: 1rem; border-radius: 8px; cursor: pointer;">
         {{ isGeneratingMinutes ? 'Generating…' : 'Generate Minutes' }}
+      </button>
+      <button
+        (click)="copyTranscript()"
+        style="background: white; color: #555; border: 2px solid #ccc;
+               padding: 0.9rem 1.8rem; font-size: 1rem; border-radius: 8px; cursor: pointer;">
+        {{ copiedTranscript ? 'Copied!' : 'Copy Transcript' }}
       </button>
       <a routerLink="/meetings"
          style="background: white; color: #1565c0; border: 2px solid #1565c0;

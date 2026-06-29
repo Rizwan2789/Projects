@@ -1,6 +1,14 @@
 <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 
-<h2 style="font-size: 1.5rem; margin-bottom: 1.5rem; color: #1a1a2e;">Meeting History</h2>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+  <h2 style="font-size: 1.5rem; margin: 0; color: #1a1a2e;">Meeting History</h2>
+  <input
+    [(ngModel)]="searchQuery"
+    (ngModelChange)="onSearch()"
+    placeholder="Search meetings…"
+    style="padding: 0.5rem 0.85rem; border: 1px solid #ddd; border-radius: 8px;
+           font-size: 0.9rem; width: 220px; color: #333; outline: none;" />
+</div>
 
 <!-- Loading -->
 <div *ngIf="isLoading" style="text-align:center; padding: 2rem; color: #888;">
@@ -13,8 +21,10 @@
 <!-- Empty state -->
 <div *ngIf="!isLoading && !error && meetings.length === 0"
      style="text-align:center; padding: 3rem; color: #aaa;">
-  <p style="font-size: 1rem; margin: 0 0 0.5rem;">No meetings yet.</p>
-  <p style="font-size: 0.85rem;">Record and transcribe a meeting to see it here.</p>
+  <p style="font-size: 1rem; margin: 0 0 0.5rem;">
+    {{ searchQuery ? 'No meetings match your search.' : 'No meetings yet.' }}
+  </p>
+  <p *ngIf="!searchQuery" style="font-size: 0.85rem;">Record and transcribe a meeting to see it here.</p>
 </div>
 
 <!-- Meeting cards -->
@@ -26,15 +36,31 @@
   <div (click)="toggle(m)"
        style="display: flex; align-items: center; justify-content: space-between;
               padding: 1rem 1.25rem; cursor: pointer; user-select: none;">
-    <div>
-      <p style="margin: 0 0 0.2rem; font-weight: 600; color: #222; font-size: 0.95rem;">
-        {{ m.title || 'Untitled Meeting' }}
-      </p>
+    <div style="flex: 1; min-width: 0;">
+      <!-- Inline title edit -->
+      <ng-container *ngIf="editingTitleId === m.id; else titleDisplay">
+        <input
+          [(ngModel)]="editingTitleValue"
+          (keydown.enter)="saveTitleEdit(m)"
+          (keydown.escape)="cancelTitleEdit()"
+          (blur)="saveTitleEdit(m)"
+          (click)="$event.stopPropagation()"
+          style="font-size: 0.95rem; font-weight: 600; color: #222; border: 1px solid #1565c0;
+                 border-radius: 4px; padding: 0.15rem 0.4rem; width: 100%; outline: none;" />
+      </ng-container>
+      <ng-template #titleDisplay>
+        <p (dblclick)="startTitleEdit($event, m)"
+           style="margin: 0 0 0.2rem; font-weight: 600; color: #222; font-size: 0.95rem;
+                  cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+           title="Double-click to rename">
+          {{ m.title || 'Untitled Meeting' }}
+        </p>
+      </ng-template>
       <p style="margin: 0; font-size: 0.8rem; color: #888;">
         {{ formatDate(m.created_at) }} &bull; {{ formatDuration(m.duration_s) }}
       </p>
     </div>
-    <div style="display: flex; gap: 0.5rem; align-items: center;">
+    <div style="display: flex; gap: 0.5rem; align-items: center; margin-left: 0.75rem; flex-shrink: 0;">
       <span *ngIf="m.has_transcript"
             style="font-size: 0.72rem; background: #e3f2fd; color: #1565c0;
                    padding: 0.15rem 0.5rem; border-radius: 99px;">transcript</span>
@@ -58,19 +84,74 @@
     </div>
   </div>
 
-  <!-- Expanded transcript -->
+  <!-- Expanded panel -->
   <div *ngIf="expandedId === m.id"
        style="border-top: 1px solid #f0f0f0; padding: 1rem 1.25rem; background: #fafafa;">
     <div *ngIf="isLoadingDetail" style="color: #888; font-size: 0.9rem;">Loading…</div>
+
     <div *ngIf="expandedMeeting && !isLoadingDetail">
+
+      <!-- No transcript -->
       <p *ngIf="!expandedMeeting.transcript" style="color: #aaa; font-size: 0.9rem; margin: 0;">
         No transcript available.
       </p>
-      <div *ngIf="expandedMeeting.transcript"
-           style="font-size: 0.9rem; line-height: 1.65; color: #333;
-                  white-space: pre-wrap; max-height: 260px; overflow-y: auto;">
-        {{ expandedMeeting.transcript }}
-      </div>
+
+      <!-- Transcript view / edit -->
+      <ng-container *ngIf="expandedMeeting.transcript">
+        <!-- Transcript header row -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+          <h4 style="margin: 0; font-size: 0.85rem; color: #555; font-weight: 600;">Transcript</h4>
+          <div style="display: flex; gap: 0.5rem;">
+            <button *ngIf="editingTranscriptId !== expandedMeeting.id"
+                    (click)="startTranscriptEdit($event)"
+                    style="background:none;border:1px solid #ddd;border-radius:6px;
+                           padding:0.2rem 0.55rem;font-size:0.78rem;color:#555;cursor:pointer;">
+              Edit
+            </button>
+            <ng-container *ngIf="editingTranscriptId === expandedMeeting.id">
+              <button (click)="saveTranscriptEdit($event)"
+                      [disabled]="isSavingTranscript"
+                      style="background:#1565c0;border:none;border-radius:6px;
+                             padding:0.2rem 0.55rem;font-size:0.78rem;color:white;cursor:pointer;">
+                {{ isSavingTranscript ? 'Saving…' : 'Save' }}
+              </button>
+              <button (click)="cancelTranscriptEdit($event)"
+                      style="background:none;border:1px solid #ddd;border-radius:6px;
+                             padding:0.2rem 0.55rem;font-size:0.78rem;color:#555;cursor:pointer;">
+                Cancel
+              </button>
+            </ng-container>
+            <button (click)="copyTranscript($event)"
+                    style="background:none;border:1px solid #ddd;border-radius:6px;
+                           padding:0.2rem 0.55rem;font-size:0.78rem;color:#555;cursor:pointer;">
+              {{ copiedMap['transcript'] ? 'Copied!' : 'Copy' }}
+            </button>
+            <button (click)="downloadTxt($event, 'transcript')"
+                    style="background:none;border:1px solid #ddd;border-radius:6px;
+                           padding:0.2rem 0.55rem;font-size:0.78rem;color:#555;cursor:pointer;">
+              ↓ .txt
+            </button>
+          </div>
+        </div>
+
+        <!-- Read-only transcript -->
+        <div *ngIf="editingTranscriptId !== expandedMeeting.id"
+             style="font-size: 0.9rem; line-height: 1.65; color: #333;
+                    white-space: pre-wrap; max-height: 260px; overflow-y: auto;
+                    background: white; border: 1px solid #e8e8e8; border-radius: 6px; padding: 0.75rem;">
+          {{ expandedMeeting.transcript }}
+        </div>
+
+        <!-- Editable transcript -->
+        <textarea *ngIf="editingTranscriptId === expandedMeeting.id"
+                  [(ngModel)]="editingTranscriptValue"
+                  (click)="$event.stopPropagation()"
+                  rows="10"
+                  style="width: 100%; box-sizing: border-box; font-size: 0.9rem; line-height: 1.65;
+                         color: #333; border: 1px solid #1565c0; border-radius: 6px; padding: 0.75rem;
+                         resize: vertical; font-family: inherit; outline: none;">
+        </textarea>
+      </ng-container>
 
       <!-- Generate Minutes button -->
       <div *ngIf="expandedMeeting.transcript && !minutesHtmlMap[m.id]"
@@ -102,13 +183,28 @@
 
       <!-- Minutes display -->
       <div *ngIf="minutesHtmlMap[m.id]" style="margin-top: 1rem;">
-        <h4 style="margin: 0 0 0.5rem; font-size: 0.9rem; color: #7b1fa2;">Meeting Minutes</h4>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+          <h4 style="margin: 0; font-size: 0.85rem; color: #7b1fa2; font-weight: 600;">Meeting Minutes</h4>
+          <div style="display: flex; gap: 0.5rem;">
+            <button (click)="copyMinutes($event)"
+                    style="background:none;border:1px solid #ddd;border-radius:6px;
+                           padding:0.2rem 0.55rem;font-size:0.78rem;color:#555;cursor:pointer;">
+              {{ copiedMap['minutes'] ? 'Copied!' : 'Copy' }}
+            </button>
+            <button (click)="downloadTxt($event, 'minutes')"
+                    style="background:none;border:1px solid #ddd;border-radius:6px;
+                           padding:0.2rem 0.55rem;font-size:0.78rem;color:#555;cursor:pointer;">
+              ↓ .txt
+            </button>
+          </div>
+        </div>
         <div [innerHTML]="minutesHtmlMap[m.id]"
              style="background: #fdf6ff; border: 1px solid #ce93d8; border-radius: 8px;
                     padding: 1rem; font-size: 0.87rem; line-height: 1.6; color: #333;
                     max-height: 400px; overflow-y: auto;">
         </div>
       </div>
+
     </div>
   </div>
 
